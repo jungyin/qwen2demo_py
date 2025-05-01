@@ -13,7 +13,8 @@ class CustomStreamer(transformers.generation.streamers.BaseStreamer):
         self.time123 = time.time()
         self.cachetime = []
     def put(self, value):
-        self.cachetime .append(time.time()-self.time123)
+        ctime = time.time()-self.time123
+        self.cachetime .append(ctime)
         self.time123 = time.time()
 
         # 将模型生成的ID转换为文本

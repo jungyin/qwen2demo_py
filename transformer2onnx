@@ -1,0 +1,5 @@
+import os
+model_pth = "Dmeta-embedding/"
+save_dir = "onnx_dir"
+cmd = "python -m transformers.onnx --model={} {}".format(model_pth, save_dir)
+os.system(cmd)

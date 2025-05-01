@@ -1,11 +1,14 @@
 import os
+
 from mystreamer import CustomStreamer
+
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 from transformers import AutoModelForCausalLM, AutoTokenizer
 model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-Coder-0.5B-Instruct"
 # model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-Coder-0.5B-Instruct-GPTQ-Int8"
 # model_name = "Qwen/Qwen2.5-Coder-3B-Instruct"
-model_name = "D:\code\python\qwen\source\qwen2.5_1.5b_math"
+# model_name = "e:\新建文件夹\qwen\source\qwen2.5_1.5b_math"
+# model_name = ".\source\qwen2.5_1.5b_math"
 import numpy as np
 
 import torch 
@@ -54,10 +57,10 @@ messages = [
 def convert_bf16_fp16_to_fp32(model):
     for param in model.parameters():
         if param.dtype == torch.bfloat16 or param.dtype == torch.float16:
-            param.data = param.data.to(dtype=torch.float16)
+            param.data = param.data.to(dtype=torch.float32)
     for buffer in model.buffers():
         if buffer.dtype == torch.bfloat16 or buffer.dtype == torch.float16:
-            buffer.data = buffer.data.to(dtype=torch.float16)
+            buffer.data = buffer.data.to(dtype=torch.float32)
     return model
 
 
@@ -103,26 +106,26 @@ text = tokenizer.apply_chat_template(
     tokenize=False,
     add_generation_prompt=True
 )
-# text1 = text
-# input_names = ["input_ids","attention_mask","position_ids"]
-# input_names.append("past_key_values")
-# output_names = ["last_hidden_state"]
-# output_names .append( "past_key_values")
+text1 = text
+input_names = ["input_ids","attention_mask","position_ids"]
+input_names.append("past_key_values")
+output_names = ["last_hidden_state"]
+output_names .append( "past_key_values")
 
 
 model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
-# input_ids = model_inputs.data['input_ids']
-# attention_mask = model_inputs.data['attention_mask']
+input_ids = model_inputs.data['input_ids']
+attention_mask = model_inputs.data['attention_mask']
 
-# position_ids = attention_mask.long().cumsum(-1) - 1
-# position_ids.masked_fill_(attention_mask == 0, 1)
-# past_key_values =torch.from_numpy( build_cache_random(model)).to(position_ids.device).to(torch.float16)
+position_ids = attention_mask.long().cumsum(-1) - 1
+position_ids.masked_fill_(attention_mask == 0, 1)
+past_key_values =torch.from_numpy( build_cache_random(model)).to(position_ids.device).to(torch.float16)
 # input = mypre(model_inputs['input_ids'],model_inputs['attention_mask'])
 
 
-model.base_model.kk = False
-model.kk = False
+# model.base_model.kk = False
+# model.kk = False
 
 tmodel = model
 tmodel.kk = True
@@ -140,13 +143,13 @@ tmodel.kk = True
 tmodel.kk=False
 
 
-
 custom_streamer = CustomStreamer(tokenizer)
+streamer = custom_streamer
+
 generated_ids = model.generate(
     **model_inputs,
     max_new_tokens=512,
-    
-    streamer = custom_streamer
+    streamer=streamer
 )
 
 
