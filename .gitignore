@@ -1,0 +1,16 @@
+.DS_Store
+/onnx
+/model_file
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+*.onnx
+*.pt
+*.pyc
+*.npy
+*.bin
+*.7z
+*.zip
+/transformers
+/source
