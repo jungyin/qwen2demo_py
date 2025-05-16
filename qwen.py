@@ -6,17 +6,19 @@ import numpy as np
 
 import torch 
 
+import torch.nn.functional as F
 
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 from transformers import AutoModelForCausalLM, AutoTokenizer
-model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-Coder-0.5B-Instruct"
-model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-3B-Instruct"
+model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-0.5B-Instruct"
+# model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-3B-Instruct"
 # model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-Coder-0.5B-Instruct-GPTQ-Int8"
 # model_name = "Qwen/Qwen2.5-Coder-3B-Instruct"
 # model_name = "./source/qwen2.5_1.5b_math"
 outtype = torch.float32
 # fpath = "./onnx/math-1.5b/model.onnx"
-fpath = "./onnx/qwen2_3b/model.onnx"
+# fpath = "./onnx/qwen2_3b/model.onnx"
+fpath = "./onnx/qwen2_0.5b_test/model.onnx"
 
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
@@ -114,6 +116,7 @@ text = tokenizer.apply_chat_template(
 text1 = text
 input_names = ["input_ids","attention_mask","position_ids"]
 input_names.append("past_key_values")
+input_names.append("clip_index")
 output_names = ["last_hidden_state"]
 output_names .append( "past_key_values")
 
@@ -130,7 +133,6 @@ past_key_values =torch.from_numpy( build_cache_random(model)).to(position_ids.de
 
 
 model.base_model.kk = False
-model.kk = False
 
 tmodel = model
 tmodel.kk = True
@@ -153,8 +155,19 @@ print(f"Model FLOPs: {macs}")
 
 model = outmodel
 
+test = torch.from_numpy(np.array([[47,47,47,0]])).to(torch.long)
+max_size = 1024
+input_ids = F.pad(input_ids,(0,max_size-input_ids.shape[-1],0,0),value=0)
+attention_mask = F.pad(attention_mask,(0,max_size-attention_mask.shape[-1],0,0),value=0)
+position_ids = F.pad(position_ids,(0,max_size-position_ids.shape[-1],0,0),value=0)
 
-torch.onnx.export(outmodel, (input_ids,attention_mask,position_ids,past_key_values) ,input_names=input_names ,output_names=output_names , f=fpath ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1],'past_key_values':[4]},opset_version=18)
+outpad = (0,0,0,max_size-past_key_values.shape[-2])
+past_key_values = F.pad(past_key_values,outpad,value=0)
+
+
+outtest = model(input_ids,attention_mask,position_ids,past_key_values,test)
+
+torch.onnx.export(outmodel, (input_ids,attention_mask,position_ids,past_key_values,test) ,input_names=input_names ,output_names=output_names , f=fpath ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1],'past_key_values':[4]},opset_version=18)
 # torch.onnx.export(outmodel, (input_ids,attention_mask,position_ids) ,input_names=input_names ,output_names=output_names , f="./onnx/model32.onnx" ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1]},opset_version = 18)
 
 tmodel.kk=False
