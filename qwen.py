@@ -165,9 +165,9 @@ outpad = (0,0,0,max_size-past_key_values.shape[-2])
 past_key_values = F.pad(past_key_values,outpad,value=0)
 
 
-outtest = model(input_ids,attention_mask,position_ids,past_key_values,test)
+# outtest = model(input_ids,attention_mask,position_ids,past_key_values,test)
 
-torch.onnx.export(outmodel, (input_ids,attention_mask,position_ids,past_key_values,test) ,input_names=input_names ,output_names=output_names , f=fpath ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1],'past_key_values':[4]},opset_version=18)
+# torch.onnx.export(outmodel, (input_ids,attention_mask,position_ids,past_key_values,test) ,input_names=input_names ,output_names=output_names , f=fpath ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1],'past_key_values':[4]},opset_version=18)
 # torch.onnx.export(outmodel, (input_ids,attention_mask,position_ids) ,input_names=input_names ,output_names=output_names , f="./onnx/model32.onnx" ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1]},opset_version = 18)
 
 tmodel.kk=False

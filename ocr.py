@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import torch
 
-p = "D:/code/python/qwen/source/latex"
+p = "./source/latex"
 tokenizer = AutoTokenizer.from_pretrained(p, max_len=296)
 feature_extractor = AutoImageProcessor.from_pretrained(p, local_files_only=True)
 
@@ -14,6 +14,7 @@ model = VisionEncoderDecoderModel.from_pretrained(p)
 
 
 
+model.base_model.kk = True
 model.base_model.decoder.kk = True
 model.base_model.encoder.kk = True
 
