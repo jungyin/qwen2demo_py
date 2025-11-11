@@ -8,22 +8,32 @@ import torch
 
 import torch.nn.functional as F
 
+from utils import add_detailed_export_logging
+
+import transformers.masking_utils as m_utils
+
+# 这个方法不生效，需要手动点过去，吧这个值赋为false
+m_utils._is_torch_greater_or_equal_than_2_6= False
+
+os.environ.setdefault("ONNX_PYTORCH_DEBUG", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-0.5B-Instruct"
 # model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-3B-Instruct"
 # model_name = "D:\\code\\transformer_models\\models--Qwen--Qwen2.5-Coder-0.5B-Instruct-GPTQ-Int8"
 # model_name = "Qwen/Qwen2.5-Coder-3B-Instruct"
 # model_name = "./source/qwen2.5_1.5b_math"
-outtype = torch.float32
+outtype = torch.bfloat16
 # fpath = "./onnx/math-1.5b/model.onnx"
-# fpath = "./onnx/qwen2_3b/model.onnx"
-fpath = "./onnx/qwen2_0.5b_test/model.onnx"
+fpath = "./onnx/qwen2_3b_bf16/model.onnx"
+# fpath = "./onnx/qwen2_0.5b_new/model.onnx"
 
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     torch_dtype="auto",
-    device_map="cpu",
+    device_map="auto",
     local_files_only=True
 )
 
@@ -49,12 +59,12 @@ prompt = "def get_hr(y, sr=30, min=30, max=180):\
     q = q[pindex]\
     qindex = np.argmax(q)\
     rp = p[pindex]\
-    return rp[qindex]*60 代码分析"
+    return rp[qindex]*60 代码分析,并根据这个代码，提供一个简单的可复用场景,并着重在里面说你做了什么工作，做了什么优化？"
 
-prompt= "请帮我写一个傅里叶变化公式,并使用python代码简单复现一下"
+# prompt= "请帮我写一个傅里叶变化公式,并使用python代码简单复现一下"
 # prompt = "\n请给我一段，有多行代码的latex公式"
 # prompt = "\n一个prompt中，包含那些参数？除了role,content，还有什么"
-# prompt = "请给我生成一个带有吃苹果的小女孩的图片,然后请我吃苹果"
+prompt = "请给我生成一个带有吃苹果的小女孩的图片,然后请我吃苹果"
 messages = [
     {"role": "system", "content": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.","user":"yinjun"},
     {"role": "user", "content": prompt,"user":"yinjun"}
@@ -73,7 +83,7 @@ def convert_bf16_fp16_to_fp32(model):
 
 def build_cache_random(model):
       
-    num_hidden_layers = model.base_model.num_hidden_layers
+    num_hidden_layers = model.base_model.config.num_hidden_layers
     head_dim = model.base_model.config.hidden_size // model.base_model.config.num_attention_heads
     kvszie = 2 
     # 1,2,?,head_dim
@@ -116,7 +126,6 @@ text = tokenizer.apply_chat_template(
 text1 = text
 input_names = ["input_ids","attention_mask","position_ids"]
 input_names.append("past_key_values")
-input_names.append("clip_index")
 output_names = ["last_hidden_state"]
 output_names .append( "past_key_values")
 
@@ -126,9 +135,15 @@ model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 input_ids = model_inputs.data['input_ids']
 attention_mask = model_inputs.data['attention_mask']
 
+
 position_ids = attention_mask.long().cumsum(-1) - 1
 position_ids.masked_fill_(attention_mask == 0, 1)
 past_key_values =torch.from_numpy( build_cache_random(model)).to(position_ids.device).to(outtype)
+
+
+
+
+
 # input = mypre(model_inputs['input_ids'],model_inputs['attention_mask'])
 
 
@@ -140,7 +155,7 @@ tmodel.kk = True
 #cache_list = numpy.array()
 
 outmodel =  convert_bf16_fp16_to_fp32(tmodel) 
-# outmodel =  tmodel
+outmodel =  tmodel
 
 
 # traced_model = torch.jit.script(outmodel)
@@ -149,9 +164,9 @@ outmodel =  convert_bf16_fp16_to_fp32(tmodel)
 dummy_input = (input_ids,attention_mask,position_ids,past_key_values)  # 根据实际情况调整输入尺寸
 
 # 计算FLOPs，将所有输入放入tuple中
-macs = profile_macs(outmodel,(input_ids,attention_mask,position_ids,past_key_values) )
+# macs = profile_macs(outmodel,(input_ids,attention_mask,position_ids,past_key_values) )
 
-print(f"Model FLOPs: {macs}")
+# print(f"Model FLOPs: {macs}")
 
 model = outmodel
 
@@ -165,10 +180,17 @@ outpad = (0,0,0,max_size-past_key_values.shape[-2])
 past_key_values = F.pad(past_key_values,outpad,value=0)
 
 
-# outtest = model(input_ids,attention_mask,position_ids,past_key_values,test)
 
+
+traced_model = torch.jit.trace(outmodel, (input_ids,attention_mask,position_ids,past_key_values) )
+add_detailed_export_logging(traced_model)
+# traced_model.save("traced_model.pt") 
+# find_unexpected_tensor_types(traced_model)
+# outtest = model(input_ids,attention_mask,position_ids,past_key_values)
 # torch.onnx.export(outmodel, (input_ids,attention_mask,position_ids,past_key_values,test) ,input_names=input_names ,output_names=output_names , f=fpath ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1],'past_key_values':[4]},opset_version=18)
+torch.onnx.export(traced_model, (input_ids,attention_mask,position_ids,past_key_values) ,input_names=input_names ,output_names=output_names ,verbose= True, f=fpath ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1],'past_key_values':[4]},opset_version=18)
 # torch.onnx.export(outmodel, (input_ids,attention_mask,position_ids) ,input_names=input_names ,output_names=output_names , f="./onnx/model32.onnx" ,dynamic_axes={'input_ids':[1],'attention_mask':[1],'position_ids':[1],'last_hidden_state':[1]},opset_version = 18)
+
 
 tmodel.kk=False
 
@@ -177,7 +199,7 @@ tmodel.kk=False
 
 generated_ids = model.generate(
     **model_inputs,
-    max_new_tokens=512
+    max_new_tokens=2000
 )
 
 
